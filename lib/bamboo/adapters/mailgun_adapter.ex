@@ -86,6 +86,10 @@ defmodule Bamboo.MailgunAdapter do
   end
 
   @mailgun_message_fields ~w(from to cc bcc subject text html)a
+  @mailgun_specials Enum.map(~w(
+    tag campaign deliverytime dkim testmode tracking
+    tracking-clicks tracking-opens require-tls skip-verification
+  ), fn field -> "o:" <> field end)
 
   defp to_mailgun_body(%Email{} = email) do
     email
@@ -94,6 +98,7 @@ defmodule Bamboo.MailgunAdapter do
     |> put_html_body(email)
     |> put_text_body(email)
     |> Map.take(@mailgun_message_fields)
+    |> Map.merge(Map.take(email.private, @mailgun_specials))
     |> remove_empty_fields
   end
 
