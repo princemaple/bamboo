@@ -67,11 +67,11 @@ defmodule Bamboo.Mailer do
       @adapter config.adapter
       @config config
 
-      def deliver_now(email) do
+      def deliver_now(%Bamboo.Email{} = email) do
         Bamboo.Mailer.deliver_now(@adapter, email, @config)
       end
 
-      def deliver_later(email) do
+      def deliver_later(%Bamboo.Email{} = email) do
         Bamboo.Mailer.deliver_later(@adapter, email, @config)
       end
 
@@ -110,7 +110,7 @@ defmodule Bamboo.Mailer do
 
   @doc false
   def deliver_now(adapter, email, config) do
-    email = email |> validate_and_normalize
+    email = email |> normalize_and_validate
 
     if email.to == [] && email.cc == [] && email.bcc == [] do
       debug_unsent(email)
@@ -123,7 +123,7 @@ defmodule Bamboo.Mailer do
 
   @doc false
   def deliver_later(adapter, email, config) do
-    email = email |> validate_and_normalize
+    email = email |> normalize_and_validate
 
     if email.to == [] && email.cc == [] && email.bcc == [] do
       debug_unsent(email)
@@ -150,42 +150,9 @@ defmodule Bamboo.Mailer do
     """
   end
 
-  defp validate_and_normalize(email) do
-    email |> validate |> normalize_addresses
+  defp normalize_and_validate(email) do
+    email |> normalize_addresses |> validate
   end
-
-  defp validate(email) do
-    email
-    |> validate_from_address
-    |> validate_recipients
-  end
-
-  defp validate_from_address(%{from: nil}) do
-    raise Bamboo.EmptyFromAddressError, nil
-  end
-  defp validate_from_address(%{from: {_, nil}}) do
-    raise Bamboo.EmptyFromAddressError, nil
-  end
-  defp validate_from_address(email), do: email
-
-  defp validate_recipients(%Bamboo.Email{} = email) do
-    if Enum.all?(
-      Enum.map([:to, :cc, :bcc], &Map.get(email, &1)),
-      &is_nil_recipient?/1
-    ) do
-      raise Bamboo.NilRecipientsError, email
-    else
-      email
-    end
-  end
-
-  defp is_nil_recipient?(nil), do: true
-  defp is_nil_recipient?({_, nil}), do: true
-  defp is_nil_recipient?([]), do: false
-  defp is_nil_recipient?([_|_] = recipients) do
-    Enum.all?(recipients, &is_nil_recipient?/1)
-  end
-  defp is_nil_recipient?(_), do: false
 
   @doc """
   Wraps to, cc and bcc addresses in a list and normalizes email addresses.
@@ -205,6 +172,35 @@ defmodule Bamboo.Mailer do
   defp format(record, type) do
     Formatter.format_email_address(record, %{type: type})
   end
+
+  defp validate(email) do
+    email
+    |> validate_from_address
+    |> validate_recipients
+  end
+
+  defp validate_from_address(%{from: {_, nil}}) do
+    raise Bamboo.EmptyFromAddressError, nil
+  end
+  defp validate_from_address(email), do: email
+
+  defp validate_recipients(email) do
+    if Enum.all?(
+      Enum.map([:to, :cc, :bcc], &Map.get(email, &1)),
+      &is_nil_recipient?/1
+    ) do
+      raise Bamboo.NilRecipientsError, email
+    else
+      email
+    end
+  end
+
+  defp is_nil_recipient?({_, nil}), do: true
+  defp is_nil_recipient?([]), do: false
+  defp is_nil_recipient?([_|_] = recipients) do
+    Enum.all?(recipients, &is_nil_recipient?/1)
+  end
+  defp is_nil_recipient?(_), do: false
 
   @doc false
   def parse_opts(mailer, opts) do

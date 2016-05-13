@@ -61,6 +61,27 @@ defprotocol Bamboo.Formatter do
   def format_email_address(data, opts)
 end
 
+defmodule Bamboo.Formatter.Error do
+  defmacro argument_error(argument) do
+    quote bind_quoted: [invalid_address: argument] do
+      raise ArgumentError, """
+      The format of the address was invalid. Got #{inspect invalid_address}.
+
+      Expected a string, e.g. "foo@bar.com", a 2 item tuple {name, address}, or
+      something that implements the Bamboo.Formatter protocol.
+
+      Example:
+
+      defimpl Bamboo.Formatter, for: MyApp.User do
+        def format_email_address(user, _opts) do
+          {user.name, user.email}
+        end
+      end
+      """
+    end
+  end
+end
+
 defimpl Bamboo.Formatter, for: List do
   def format_email_address(email_addresses, opts) do
     email_addresses |> Enum.map(&Bamboo.Formatter.format_email_address(&1, opts))
@@ -73,27 +94,27 @@ defimpl Bamboo.Formatter, for: BitString do
   end
 end
 
+defimpl Bamboo.Formatter, for: Atom do
+  def format_email_address(nil, _opts), do: {nil, nil}
+  def format_email_address(other_atom, _opts) do
+    import Bamboo.Formatter.Error
+    argument_error(other_atom)
+  end
+end
+
 defimpl Bamboo.Formatter, for: Tuple do
-  def format_email_address(already_formatted_email, _opts) do
+  def format_email_address({_name, _email} = already_formatted_email, _opts) do
     already_formatted_email
+  end
+  def format_email_address(malformed_tuple, _opts) do
+    import Bamboo.Formatter.Error
+    argument_error(malformed_tuple)
   end
 end
 
 defimpl Bamboo.Formatter, for: Map do
   def format_email_address(invalid_address, _opts) do
-    raise ArgumentError, """
-    The format of the address was invalid. Got #{inspect invalid_address}.
-
-    Expected a string, e.g. "foo@bar.com", a 2 item tuple {name, address}, or
-    something that implements the Bamboo.Formatter protocol.
-
-    Example:
-
-    defimpl Bamboo.Formatter, for: MyApp.User do
-      def format_email_address(user, _opts) do
-        {user.name, user.email}
-      end
-    end
-    """
+    import Bamboo.Formatter.Error
+    argument_error(invalid_address)
   end
 end
